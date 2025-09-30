@@ -81,10 +81,12 @@ const countryCode2to3 = Object.fromEntries(Object.entries(countryCodeMapping).ma
 
 const policyDataUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vS6CB5iec7U6REadNIkrQ-xmvK_mTJyx03SRSxdVu8FtxOuJ66Ez5NoanJbc-j_rwi6L4Apy8rEpmCj/pub?gid=616394498&single=true&output=csv';
 
+const baseUrl = (import.meta as any).env.BASE_URL || '/';
+
 Promise.all([
-    d3.json('/world.geojson'),
+    d3.json(`${baseUrl}world.geojson`),
     d3.csv(policyDataUrl),
-    d3.json('/policy-details.json')
+    d3.json(`${baseUrl}policy-details.json`)
 ]).then(([geoData, policyCsv, policyDetails]: [any, any, any]) => {
 
     console.log("D3 detected columns:", policyCsv.columns);
@@ -190,7 +192,7 @@ Promise.all([
                         // Close all accordions
                         document.querySelectorAll('.accordion-button').forEach(btn => {
                             btn.classList.remove('active');
-                            const content = btn.nextElementSibling as HTMLElement;
+                            const content = (btn as HTMLElement).nextElementSibling as HTMLElement;
                             if (content) {
                                 content.style.maxHeight = '';
                             }

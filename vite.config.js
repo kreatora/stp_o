@@ -5,8 +5,9 @@ import { resolve } from 'path';
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react()],
-  base: process.env.NODE_ENV === 'production' ? '/stp_o/' : '/',
+  base: '/stp_o/',
   build: {
+    outDir: 'docs',
     rollupOptions: {
       input: {
         main: resolve(__dirname, 'index.html'),

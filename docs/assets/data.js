@@ -1,1 +1,1 @@
-import{R as o,j as e,a}from"./input.js";const t=document.getElementById("root");t&&o.createRoot(t).render(e.jsx(a.StrictMode,{children:e.jsx("div",{children:"Data Page - Coming Soon"})}));
+import"./input.js";import{R as o,j as t,a as r}from"./client.js";const e=document.getElementById("root");e&&o.createRoot(e).render(t.jsx(r.StrictMode,{children:t.jsx("div",{children:"Data Page - Coming Soon"})}));

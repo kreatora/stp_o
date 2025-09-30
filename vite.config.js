@@ -14,6 +14,7 @@ export default defineConfig({
         ontology: resolve(__dirname, 'ontology.html'),
         data: resolve(__dirname, 'data.html'),
         aboutUs: resolve(__dirname, 'about-us.html'),
+        worldMap: resolve(__dirname, 'world-map.html'),
       },
       output: {
         entryFileNames: 'assets/[name].js',

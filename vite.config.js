@@ -5,7 +5,7 @@ import { resolve } from 'path';
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react()],
-  base: process.env.NODE_ENV === 'production' ? '/stp_website/' : '/',
+  base: process.env.NODE_ENV === 'production' ? '/stp_o/' : '/',
   build: {
     rollupOptions: {
       input: {

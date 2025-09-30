@@ -1,0 +1,1 @@
+import{R as o,j as e,a as c}from"./input.js";const t=document.getElementById("root");t&&o.createRoot(t).render(e.jsx(c.StrictMode,{children:e.jsx("div",{children:"Welcome to the Climate Policy Atlas"})}));

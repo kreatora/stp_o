@@ -2,6 +2,404 @@ import * as d3 from 'd3';
 import { geoMercator, geoPath } from 'd3-geo';
 import polylabel from 'polylabel';
 
+// Modal functionality for full-screen charts
+function openModal() {
+    const modal = document.getElementById('chart-modal');
+    if (modal) {
+        modal.classList.remove('hidden');
+        document.body.style.overflow = 'hidden';
+        initializeDragFunctionality();
+    }
+}
+
+function closeModal() {
+    const modal = document.getElementById('chart-modal');
+    if (modal) {
+        modal.classList.add('hidden');
+        document.body.style.overflow = 'auto';
+        // Clear modal content
+        const modalContent = document.getElementById('modal-content');
+        if (modalContent) {
+            modalContent.innerHTML = '';
+        }
+        // Reset modal position
+        const modalWindow = document.getElementById('modal-window');
+        if (modalWindow) {
+            modalWindow.style.transform = '';
+        }
+    }
+}
+
+// Drag functionality for modal
+function initializeDragFunctionality() {
+    const modalHeader = document.getElementById('modal-header');
+    const modalWindow = document.getElementById('modal-window');
+    
+    if (!modalHeader || !modalWindow) return;
+    
+    let isDragging = false;
+    let startX = 0;
+    let startY = 0;
+    let initialX = 0;
+    let initialY = 0;
+    
+    modalHeader.addEventListener('mousedown', (e: MouseEvent) => {
+        isDragging = true;
+        startX = e.clientX;
+        startY = e.clientY;
+        
+        // Get current transform values
+        const transform = modalWindow.style.transform;
+        const matrix = transform.match(/translate\(([^,]+),\s*([^)]+)\)/);
+        if (matrix) {
+            initialX = parseFloat(matrix[1]) || 0;
+            initialY = parseFloat(matrix[2]) || 0;
+        } else {
+            initialX = 0;
+            initialY = 0;
+        }
+        
+        modalHeader.style.cursor = 'grabbing';
+        e.preventDefault();
+    });
+    
+    document.addEventListener('mousemove', (e: MouseEvent) => {
+        if (!isDragging) return;
+        
+        const deltaX = e.clientX - startX;
+        const deltaY = e.clientY - startY;
+        
+        const newX = initialX + deltaX;
+        const newY = initialY + deltaY;
+        
+        modalWindow.style.transform = `translate(${newX}px, ${newY}px)`;
+    });
+    
+    document.addEventListener('mouseup', () => {
+        if (isDragging) {
+            isDragging = false;
+            modalHeader.style.cursor = 'move';
+        }
+    });
+}
+
+// Add close button event listener
+document.addEventListener('DOMContentLoaded', () => {
+    const closeButton = document.getElementById('close-modal');
+    if (closeButton) {
+        closeButton.addEventListener('click', closeModal);
+    }
+    
+    // Close modal when clicking outside the content
+    const modal = document.getElementById('chart-modal');
+    if (modal) {
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                closeModal();
+            }
+        });
+    }
+});
+
+// Function to create full-screen pie chart
+function createFullScreenPieChart(pieData: any[], countryName: string, globalColorScale: any) {
+    const modalContent = document.getElementById('modal-content');
+    const modalTitle = document.getElementById('modal-title');
+    if (!modalContent) return;
+
+    // Set modal title
+    if (modalTitle) {
+        modalTitle.textContent = `Policy Distribution - ${countryName}`;
+    }
+
+    modalContent.innerHTML = `
+        <div id="fullscreen-pie-chart" class="w-full h-full"></div>
+    `;
+
+    // Add a small delay to ensure the modal is fully rendered
+    setTimeout(() => {
+        const container = document.getElementById('fullscreen-pie-chart');
+        if (!container) return;
+
+        const containerRect = container.getBoundingClientRect();
+        // Fully responsive sizing based on container dimensions
+        const isSmallScreen = containerRect.width < 768;
+        
+        // Calculate available space using percentages
+        const availableWidth = containerRect.width;
+        const availableHeight = containerRect.height;
+        
+        // Reserve space for legend using percentages of container
+        const legendHeightPercent = isSmallScreen ? 0.25 : 0; // 25% of height for horizontal legend
+        const legendWidthPercent = isSmallScreen ? 0 : 0.28; // 28% of width for vertical legend
+        
+        const legendHeight = availableHeight * legendHeightPercent;
+        const legendWidth = availableWidth * legendWidthPercent;
+        
+        const chartAreaWidth = availableWidth - legendWidth;
+        const chartAreaHeight = availableHeight - legendHeight;
+        
+        // Calculate chart size as percentage of available area
+        const chartSizePercent = isSmallScreen ? 0.85 : 0.75; // Use 85% on small screens, 75% on larger
+        const chartSize = Math.min(chartAreaWidth * chartSizePercent, chartAreaHeight * chartSizePercent);
+        const radius = chartSize / 2 - (chartSize * 0.1); // 10% padding relative to chart size
+
+        // Create main container with proper constraints
+        const mainContainer = d3.select(container).append('div')
+            .style('display', 'flex')
+            .style('flex-direction', isSmallScreen ? 'column' : 'row')
+            .style('align-items', 'center')
+            .style('justify-content', 'center')
+            .style('width', '100%')
+            .style('height', '100%')
+            .style('gap', isSmallScreen ? '20px' : '30px')
+            .style('padding', '20px')
+            .style('box-sizing', 'border-box')
+            .style('overflow', 'hidden');
+
+        // Chart container with fixed size
+        const chartContainer = mainContainer.append('div')
+            .style('display', 'flex')
+            .style('justify-content', 'center')
+            .style('align-items', 'center')
+            .style('flex-shrink', '0')
+            .style('width', `${chartSize}px`)
+            .style('height', `${chartSize}px`);
+
+        const svg = chartContainer
+            .append('svg')
+            .attr('width', chartSize)
+            .attr('height', chartSize);
+
+        const g = svg.append('g')
+            .attr('transform', `translate(${chartSize / 2}, ${chartSize / 2})`);
+
+        const pie = d3.pie<any>()
+            .value(d => d.count)
+            .sort(null);
+
+        const arc = d3.arc<any>()
+            .innerRadius(0)
+            .outerRadius(radius);
+
+        const totalCount = d3.sum(pieData, d => d.count);
+
+        // Create pie slices
+        const slices = g.selectAll('.slice')
+            .data(pie(pieData))
+            .enter()
+            .append('g')
+            .attr('class', 'slice');
+
+        slices.append('path')
+            .attr('d', arc)
+            .attr('fill', d => globalColorScale(d.data.type) as string)
+            .attr('stroke', 'white')
+            .attr('stroke-width', 3);
+
+        // Add labels
+        const labelFontSize = isSmallScreen ? '12px' : '16px';
+        slices.append('text')
+            .attr('transform', d => `translate(${arc.centroid(d)})`)
+            .attr('text-anchor', 'middle')
+            .attr('font-size', labelFontSize)
+            .attr('fill', 'white')
+            .attr('font-weight', 'bold')
+            .text(d => {
+                const percentage = Math.round((d.data.count / totalCount) * 100);
+                return `${percentage}%`;
+            });
+
+        // Create fully responsive legend container
+        const legendContainer = mainContainer.append('div')
+            .style('display', 'flex')
+            .style('flex-direction', isSmallScreen ? 'row' : 'column')
+            .style('flex-wrap', isSmallScreen ? 'wrap' : 'nowrap')
+            .style('gap', isSmallScreen ? '1vw' : '1.5vh') // Responsive gap based on viewport
+            .style('align-items', isSmallScreen ? 'center' : 'flex-start')
+            .style('justify-content', isSmallScreen ? 'center' : 'flex-start')
+            .style('flex-shrink', '0')
+            .style('width', isSmallScreen ? '100%' : `${legendWidthPercent * 100}%`) // Use calculated percentage
+            .style('height', isSmallScreen ? `${legendHeightPercent * 100}%` : 'auto') // Use calculated percentage
+            .style('max-width', '100%')
+            .style('max-height', '100%')
+            .style('overflow', 'auto')
+            .style('padding', isSmallScreen ? '1vh' : '1vw') // Responsive padding
+            .style('box-sizing', 'border-box');
+
+        pieData.forEach((d) => {
+            const legendItemGap = isSmallScreen ? '0.5vw' : '0.8vh'; // Responsive gap
+            const legendItem = legendContainer.append('div')
+                .style('display', 'flex')
+                .style('align-items', 'center')
+                .style('gap', legendItemGap);
+
+            const legendBoxSize = isSmallScreen ? '1.8vw' : '2vh'; // Responsive box size
+            legendItem.append('div')
+                .style('width', legendBoxSize)
+                .style('height', legendBoxSize)
+                .style('min-width', '12px') // Minimum size for very small screens
+                .style('min-height', '12px')
+                .style('max-width', '24px') // Maximum size for very large screens
+                .style('max-height', '24px')
+                .style('background-color', globalColorScale(d.type) as string)
+                .style('border-radius', '3px')
+                .style('flex-shrink', '0');
+
+            const legendTextSize = isSmallScreen ? 'clamp(10px, 1.4vw, 16px)' : 'clamp(12px, 1.6vh, 18px)'; // Responsive text with limits
+            legendItem.append('span')
+                .style('font-size', legendTextSize)
+                .style('font-weight', 'bold')
+                .style('white-space', 'nowrap')
+                .style('overflow', 'hidden')
+                .style('text-overflow', 'ellipsis')
+                .text(`${d.type}: ${d.count}`);
+        });
+    }, 100); // 100ms delay to ensure modal is rendered
+}
+
+// Function to create full-screen time series chart
+function createFullScreenTimeSeriesChart(timeSeriesChartData: any[], countryName: string, globalColorScale: any) {
+    const modalContent = document.getElementById('modal-content');
+    const modalTitle = document.getElementById('modal-title');
+    if (!modalContent) return;
+
+    // Set modal title
+    if (modalTitle) {
+        modalTitle.textContent = `Policy Evolution Over Time - ${countryName}`;
+    }
+
+    modalContent.innerHTML = `
+        <div id="fullscreen-timeseries-chart" class="w-full h-full"></div>
+    `;
+
+    // Add a small delay to ensure the modal is fully rendered
+    setTimeout(() => {
+        const container = document.getElementById('fullscreen-timeseries-chart');
+        if (!container) return;
+
+        const containerRect = container.getBoundingClientRect();
+        // Responsive margins for smaller screens
+        const isSmallScreen = containerRect.width < 768;
+        const margin = isSmallScreen 
+            ? { top: 30, right: 120, bottom: 60, left: 60 }
+            : { top: 40, right: 200, bottom: 80, left: 80 };
+        const width = containerRect.width - margin.left - margin.right;
+        const extraSpace = isSmallScreen ? 60 : 100;
+        const height = containerRect.height - margin.top - margin.bottom - extraSpace;
+
+        const svgHeightOffset = isSmallScreen ? 30 : 50;
+        const svg = d3.select(container)
+            .append('svg')
+            .attr('width', containerRect.width)
+            .attr('height', containerRect.height - svgHeightOffset);
+
+        const g = svg.append('g')
+            .attr('transform', `translate(${margin.left}, ${margin.top})`);
+
+        // Scales
+        const allYears = timeSeriesChartData.flatMap(d => d.values.map((v: any) => v.year)).filter((year): year is number => typeof year === 'number');
+        const yearExtent = d3.extent(allYears) as [number, number];
+        const xScale = d3.scaleLinear()
+            .domain(yearExtent)
+            .range([0, width]);
+
+        const maxCount = Math.max(...timeSeriesChartData.map(d => Math.max(...d.values.map((v: any) => Number(v.count) || 0))));
+        const yScale = d3.scaleLinear()
+            .domain([0, maxCount])
+            .range([height, 0]);
+
+        // Line generator
+        const line = d3.line<any>()
+            .x((d: any) => xScale(Number(d.year)))
+            .y((d: any) => yScale(Number(d.count)))
+            .curve(d3.curveMonotoneX);
+
+        // Add axes
+        const axisFontSize = isSmallScreen ? '11px' : '14px';
+        g.append('g')
+            .attr('transform', `translate(0,${height})`)
+            .call(d3.axisBottom(xScale).tickFormat(d3.format('d')))
+            .selectAll('text')
+            .style('font-size', axisFontSize);
+
+        g.append('g')
+            .call(d3.axisLeft(yScale).tickFormat(d3.format('d')).ticks(Math.min(maxCount, 10)))
+            .selectAll('text')
+            .style('font-size', axisFontSize);
+
+        // Add lines and dots for each measure
+        const lineWidth = isSmallScreen ? 2 : 3;
+        const dotRadius = isSmallScreen ? 3 : 5;
+        timeSeriesChartData.forEach((measureData: any) => {
+            g.append('path')
+                .datum(measureData.values)
+                .attr('fill', 'none')
+                .attr('stroke', globalColorScale(measureData.measure) as string)
+                .attr('stroke-width', lineWidth)
+                .attr('d', line);
+
+            // Add dots
+            g.selectAll(`.dot-${measureData.measure.replace(/\s+/g, '-')}`)
+                .data(measureData.values)
+                .enter().append('circle')
+                .attr('class', `dot-${measureData.measure.replace(/\s+/g, '-')}`)
+                .attr('cx', (d: any) => xScale(Number(d.year)))
+                .attr('cy', (d: any) => yScale(Number(d.count)))
+                .attr('r', dotRadius)
+                .attr('fill', globalColorScale(measureData.measure) as string);
+        });
+
+        // Add legend
+        const legendOffset = isSmallScreen ? 15 : 20;
+        const legend = svg.append('g')
+            .attr('transform', `translate(${width + margin.left + legendOffset}, ${margin.top})`);
+
+        const legendSpacing = isSmallScreen ? 20 : 25;
+        const legendBoxSize = isSmallScreen ? 14 : 18;
+        const legendFontSize = isSmallScreen ? '11px' : '14px';
+        const legendTextOffset = isSmallScreen ? 18 : 24;
+        const legendTextY = isSmallScreen ? 11 : 14;
+
+        timeSeriesChartData.forEach((measureData, i) => {
+            const legendItem = legend.append('g')
+                .attr('transform', `translate(0, ${i * legendSpacing})`);
+
+            legendItem.append('rect')
+                .attr('width', legendBoxSize)
+                .attr('height', legendBoxSize)
+                .attr('fill', globalColorScale(measureData.measure) as string);
+
+            legendItem.append('text')
+                .attr('x', legendTextOffset)
+                .attr('y', legendTextY)
+                .attr('font-size', legendFontSize)
+                .text(measureData.measure);
+        });
+
+        // Add axis labels
+        const axisLabelFontSize = isSmallScreen ? '12px' : '16px';
+        const axisLabelBottomOffset = isSmallScreen ? 15 : 20;
+        
+        g.append('text')
+            .attr('transform', 'rotate(-90)')
+            .attr('y', 0 - margin.left)
+            .attr('x', 0 - (height / 2))
+            .attr('dy', '1em')
+            .style('text-anchor', 'middle')
+            .style('font-size', axisLabelFontSize)
+            .style('font-weight', 'bold')
+            .text('Policy Count');
+
+        g.append('text')
+            .attr('transform', `translate(${width / 2}, ${height + margin.bottom - axisLabelBottomOffset})`)
+            .style('text-anchor', 'middle')
+            .style('font-size', axisLabelFontSize)
+            .style('font-weight', 'bold')
+            .text('Year');
+    }, 100); // 100ms delay to ensure modal is rendered
+}
+
 const countryCodeMapping: { [key: string]: string } = {
     "AFG": "AF", "AGO": "AO", "ALB": "AL", "ARE": "AE", "ARG": "AR",
     "ARM": "AM", "ATA": "AQ", "ATF": "TF", "AUS": "AU", "AUT": "AT",
@@ -85,9 +483,8 @@ const baseUrl = (import.meta as any).env.BASE_URL || '/';
 
 Promise.all([
     d3.json(`${baseUrl}world.geojson`),
-    d3.csv(policyDataUrl),
-    d3.json(`${baseUrl}policy-details.json`)
-]).then(([geoData, policyCsv, policyDetails]: [any, any, any]) => {
+    d3.csv(policyDataUrl)
+]).then(([geoData, policyCsv]: [any, any]) => {
 
     console.log("D3 detected columns:", policyCsv.columns);
 
@@ -95,7 +492,37 @@ Promise.all([
         acc[feature.properties.name] = feature.id;
         return acc;
     }, {});
+
+    // Collect all unique policy types for consistent color mapping
+    const policyTypesSet = new Set<string>();
+    policyCsv.forEach((row: any) => {
+        const measure = row.measure ? String(row.measure) : 'Unknown';
+        policyTypesSet.add(measure);
+    });
+    const allPolicyTypes = Array.from(policyTypesSet).sort();
     
+    // Create global color mapping for policy types
+    const globalColorScale = d3.scaleOrdinal()
+        .domain(allPolicyTypes)
+        .range([
+            '#1f77b4', // blue
+            '#ff7f0e', // orange  
+            '#2ca02c', // green
+            '#d62728', // red
+            '#9467bd', // purple
+            '#8c564b', // brown
+            '#e377c2', // pink
+            '#7f7f7f', // gray
+            '#bcbd22', // olive
+            '#17becf', // cyan
+            '#aec7e8', // light blue
+            '#ffbb78', // light orange
+            '#98df8a', // light green
+            '#ff9896', // light red
+            '#c5b0d5'  // light purple
+        ]);
+    
+    // Process policy data to count total policies per country
     const policyData = policyCsv.reduce((acc: { [key: string]: number }, row: any) => {
         const countryName = row.country;
         if (countryName) {
@@ -107,6 +534,50 @@ Promise.all([
                 acc[countryCode3]++;
             } else {
                 // console.warn(`No country code found for: ${countryName}`);
+            }
+        }
+        return acc;
+    }, {});
+
+    // Process policy types (measure column) per country for pie charts
+    const policyTypeData = policyCsv.reduce((acc: { [key: string]: { [key: string]: number } }, row: any) => {
+        const countryName = row.country;
+        const measure = row.measure || 'Unknown';
+        
+        if (countryName) {
+            const countryCode3 = countryNameMap[countryName];
+            if (countryCode3) {
+                if (!acc[countryCode3]) {
+                    acc[countryCode3] = {};
+                }
+                if (!acc[countryCode3][measure]) {
+                    acc[countryCode3][measure] = 0;
+                }
+                acc[countryCode3][measure]++;
+            }
+        }
+        return acc;
+    }, {});
+
+    // Process time series data for country-specific policy evolution
+    const timeSeriesData = policyCsv.reduce((acc: { [key: string]: { [key: string]: { [key: string]: number } } }, row: any) => {
+        const countryName = row.country;
+        const measure = row.measure || 'Unknown';
+        const year = row.year;
+        
+        if (countryName && year) {
+            const countryCode3 = countryNameMap[countryName];
+            if (countryCode3) {
+                if (!acc[countryCode3]) {
+                    acc[countryCode3] = {};
+                }
+                if (!acc[countryCode3][year]) {
+                    acc[countryCode3][year] = {};
+                }
+                if (!acc[countryCode3][year][measure]) {
+                    acc[countryCode3][year][measure] = 0;
+                }
+                acc[countryCode3][year][measure]++;
             }
         }
         return acc;
@@ -128,6 +599,136 @@ Promise.all([
     
     const colorScale = d3.scaleSequential(d3.interpolateGreens)
         .domain([minPolicies as number, maxPolicies as number]);
+
+    // Function to create time series chart for a specific country
+    function createTimeSeriesChart(countryCode3: string, countryName: string) {
+        const timeSeriesContainer = document.getElementById('time-series-chart')!;
+        timeSeriesContainer.innerHTML = '';
+
+        const countryTimeData = timeSeriesData[countryCode3];
+        if (!countryTimeData || Object.keys(countryTimeData).length === 0) {
+            timeSeriesContainer.innerHTML = '<div class="flex items-center justify-center h-full text-gray-500">No time series data available for this country.</div>';
+            return;
+        }
+
+        // Prepare data for time series
+         const years = Object.keys(countryTimeData).map(Number).sort();
+         const measures = new Set<string>();
+         Object.entries(countryTimeData).forEach(([year, yearData]) => {
+             Object.keys(yearData as { [key: string]: number }).forEach(measure => measures.add(measure));
+         });
+
+        const timeSeriesChartData = Array.from(measures).map(measure => ({
+            measure,
+            values: years.map(year => ({
+                year,
+                count: countryTimeData[year]?.[measure] || 0
+            }))
+        }));
+
+        // Chart dimensions
+        const margin = { top: 15, right: 60, bottom: 30, left: 40 };
+        const chartWidth = 280 - margin.left - margin.right;
+        const chartHeight = 150 - margin.top - margin.bottom;
+
+        // Create SVG
+        const svg = d3.select(timeSeriesContainer)
+            .append('svg')
+            .attr('width', chartWidth + margin.left + margin.right)
+            .attr('height', chartHeight + margin.top + margin.bottom)
+            .style('cursor', 'pointer')
+            .on('click', function() {
+                createFullScreenTimeSeriesChart(timeSeriesChartData, countryName, globalColorScale);
+                openModal();
+            });
+
+        const g = svg.append('g')
+            .attr('transform', `translate(${margin.left},${margin.top})`);
+
+        // Scales
+        const xScale = d3.scaleLinear()
+            .domain(d3.extent(years) as [number, number])
+            .range([0, chartWidth]);
+
+        const maxCount = d3.max(timeSeriesChartData, d => d3.max(d.values, v => v.count)) || 0;
+        const yScale = d3.scaleLinear()
+            .domain([0, maxCount])
+            .range([chartHeight, 0]);
+
+        // Line generator
+        const line = d3.line<any>()
+            .x(d => xScale(d.year))
+            .y(d => yScale(d.count))
+            .curve(d3.curveMonotoneX);
+
+        // Add axes
+        g.append('g')
+            .attr('transform', `translate(0,${chartHeight})`)
+            .call(d3.axisBottom(xScale).tickFormat(d3.format('d')))
+            .selectAll('text')
+            .style('font-size', '10px');
+
+        g.append('g')
+            .call(d3.axisLeft(yScale).tickFormat(d3.format('d')).ticks(Math.min(maxCount, 10)))
+            .selectAll('text')
+            .style('font-size', '10px');
+
+        // Add lines for each measure
+        timeSeriesChartData.forEach((measureData) => {
+            g.append('path')
+                .datum(measureData.values)
+                .attr('fill', 'none')
+                .attr('stroke', globalColorScale(measureData.measure) as string)
+                .attr('stroke-width', 1.5)
+                .attr('d', line);
+
+            // Add dots
+            g.selectAll(`.dot-${measureData.measure.replace(/\s+/g, '-')}`)
+                .data(measureData.values)
+                .enter().append('circle')
+                .attr('class', `dot-${measureData.measure.replace(/\s+/g, '-')}`)
+                .attr('cx', d => xScale(d.year))
+                .attr('cy', d => yScale(d.count))
+                .attr('r', 2)
+                .attr('fill', globalColorScale(measureData.measure) as string);
+        });
+
+        // Add legend
+        const legend = svg.append('g')
+            .attr('transform', `translate(${chartWidth + margin.left + 10}, ${margin.top})`);
+
+        timeSeriesChartData.forEach((measureData, i) => {
+            const legendItem = legend.append('g')
+                .attr('transform', `translate(0, ${i * 16})`);
+
+            legendItem.append('rect')
+                .attr('width', 10)
+                .attr('height', 10)
+                .attr('fill', globalColorScale(measureData.measure) as string);
+
+            legendItem.append('text')
+                .attr('x', 14)
+                .attr('y', 8)
+                .attr('font-size', '9px')
+                .text(measureData.measure);
+        });
+
+        // Add axis labels
+        g.append('text')
+            .attr('transform', 'rotate(-90)')
+            .attr('y', 0 - margin.left)
+            .attr('x', 0 - (chartHeight / 2))
+            .attr('dy', '1em')
+            .style('text-anchor', 'middle')
+            .style('font-size', '12px')
+            .text('Policy Count');
+
+        g.append('text')
+            .attr('transform', `translate(${chartWidth / 2}, ${chartHeight + margin.bottom - 5})`)
+            .style('text-anchor', 'middle')
+            .style('font-size', '12px')
+            .text('Year');
+    }
 
     g.selectAll("path")
         .data(geoData.features)
@@ -157,57 +758,122 @@ Promise.all([
         })
         .on("click", function (event, d: any) {
             const countryCode3 = d.id;
-            const countryCode2 = countryCodeMapping[countryCode3];
             const countryName = d.properties.name;
-            const details = policyDetails[countryCode2];
+            const countryPolicyTypes = policyTypeData[countryCode3];
 
             const panel = document.getElementById('policy-panel')!;
             const backdrop = document.getElementById('panel-backdrop')!;
             const countryTitle = document.getElementById('policy-country')!;
             const policyList = document.getElementById('policy-list')!;
 
-            countryTitle.textContent = `Policies in ${countryName}`;
+            countryTitle.textContent = `Policy Types in ${countryName}`;
             policyList.innerHTML = '';
 
-            if (details && details.length > 0) {
-                details.forEach((policy: any) => {
-                    const itemDiv = document.createElement('div');
-                    itemDiv.className = 'accordion-item';
+            if (countryPolicyTypes && Object.keys(countryPolicyTypes).length > 0) {
+                // Create pie chart container
+                const chartContainer = document.createElement('div');
+                chartContainer.id = 'pie-chart-container';
+                chartContainer.style.width = '100%';
+                chartContainer.style.height = '400px';
+                chartContainer.style.display = 'flex';
+                chartContainer.style.flexDirection = 'column';
+                chartContainer.style.alignItems = 'center';
+                policyList.appendChild(chartContainer);
 
-                    const button = document.createElement('button');
-                    button.className = 'accordion-button';
-                    button.textContent = policy.name;
+                // Create SVG for pie chart
+                const pieWidth = 200;
+                const pieHeight = 200;
+                const radius = Math.min(pieWidth, pieHeight) / 2 - 10;
 
-                    const contentDiv = document.createElement('div');
-                    contentDiv.className = 'accordion-content';
-                    contentDiv.innerHTML = `<p>${policy.description}</p>`;
+                const pieSvg = d3.select(chartContainer)
+                    .append('svg')
+                    .attr('width', pieWidth)
+                    .attr('height', pieHeight);
 
-                    itemDiv.appendChild(button);
-                    itemDiv.appendChild(contentDiv);
-                    policyList.appendChild(itemDiv);
+                const pieG = pieSvg.append('g')
+                    .attr('transform', `translate(${pieWidth / 2}, ${pieHeight / 2})`);
 
-                    button.addEventListener('click', () => {
-                        const isActive = button.classList.contains('active');
-                        
-                        // Close all accordions
-                        document.querySelectorAll('.accordion-button').forEach(btn => {
-                            btn.classList.remove('active');
-                            const content = (btn as HTMLElement).nextElementSibling as HTMLElement;
-                            if (content) {
-                                content.style.maxHeight = '';
-                            }
-                        });
+                // Prepare data for pie chart
+                const pieData = Object.entries(countryPolicyTypes).map(([type, count]) => ({
+                    type,
+                    count: count as number
+                }));
 
-                        // Open the clicked one if it wasn't active
-                        if (!isActive) {
-                            button.classList.add('active');
-                            contentDiv.style.maxHeight = contentDiv.scrollHeight + "px";
-                        }
+                // Calculate total for percentages
+                const totalCount = pieData.reduce((sum, d) => sum + d.count, 0);
+
+                // Create pie layout
+                const pie = d3.pie<any>()
+                    .value(d => d.count)
+                    .sort(null);
+
+                const arc = d3.arc<any>()
+                    .innerRadius(0)
+                    .outerRadius(radius);
+
+                // Create pie slices
+                const slices = pieG.selectAll('.slice')
+                    .data(pie(pieData))
+                    .enter()
+                    .append('g')
+                    .attr('class', 'slice');
+
+                slices.append('path')
+                    .attr('d', arc)
+                    .attr('fill', d => globalColorScale(d.data.type) as string)
+                    .attr('stroke', 'white')
+                    .attr('stroke-width', 2)
+                    .style('cursor', 'pointer')
+                    .on('click', function() {
+                        createFullScreenPieChart(pieData, countryName, globalColorScale);
+                        openModal();
                     });
+
+                // Add labels (show percentages)
+                slices.append('text')
+                    .attr('transform', d => `translate(${arc.centroid(d)})`)
+                    .attr('text-anchor', 'middle')
+                    .attr('font-size', '10px')
+                    .attr('fill', 'white')
+                    .attr('font-weight', 'bold')
+                    .text(d => {
+                        const percentage = Math.round((d.data.count / totalCount) * 100);
+                        return `${percentage}%`;
+                    });
+
+                // Create legend
+                const legend = d3.select(chartContainer)
+                    .append('div')
+                    .style('margin-top', '20px')
+                    .style('display', 'flex')
+                    .style('flex-wrap', 'wrap')
+                    .style('justify-content', 'center')
+                    .style('gap', '10px');
+
+                pieData.forEach((d) => {
+                    const legendItem = legend.append('div')
+                        .style('display', 'flex')
+                        .style('align-items', 'center')
+                        .style('margin', '5px');
+
+                    legendItem.append('div')
+                        .style('width', '12px')
+                        .style('height', '12px')
+                        .style('background-color', globalColorScale(d.type) as string)
+                        .style('margin-right', '4px')
+                        .style('border-radius', '2px');
+
+                    legendItem.append('span')
+                        .style('font-size', '10px')
+                        .text(`${d.type} (${d.count})`);
                 });
+
             } else {
-                policyList.innerHTML = '<p>No detailed policy information available.</p>';
+                policyList.innerHTML = '<p>No policy type data available for this country.</p>';
             }
+
+            // Create time series chart
+            createTimeSeriesChart(countryCode3, countryName);
 
             panel.classList.add('visible');
             backdrop.classList.add('visible');
